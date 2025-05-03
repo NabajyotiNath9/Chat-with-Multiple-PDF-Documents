@@ -5,29 +5,29 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.docarray import DocArrayInMemorySearch
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
-import tempfile
+import io
 
-# Set your API key for Gemini 2.0
-os.environ["GEMINI_API_KEY"] = "your_gemini_api_key_here"  # Replace with your API key
+# Fetch Gemini API key from Streamlit secrets
+gemini_api_key = st.secrets["google"]["gemini_api_key"]  # Ensure this matches your secrets.toml entry
 
 # Initialize Google Gemini 2.0 model (flash)
 llm = ChatGoogleGenerativeAI(
-    api_key=os.getenv("GEMINI_API_KEY"),
+    api_key=gemini_api_key,
     model="gemini-2.0-flash-exp",
     temperature=0.7
 )
 
 # Initialize PDF loader and text splitter
-loader = PyPDFLoader()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
 
 # Function to load and split PDF file
 def load_and_split_pdf(file):
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        tmp_file.write(file.getvalue())
-        tmp_file_path = tmp_file.name
+    # Load the PDF as a BytesIO object directly from the uploaded file
+    file_stream = io.BytesIO(file.getvalue())
+    loader = PyPDFLoader(file_stream)
     
-    documents = loader.load_and_split(file_path=tmp_file_path)
+    # Load and split the document
+    documents = loader.load_and_split()
     text_chunks = text_splitter.split_documents(documents)
     return text_chunks
 
