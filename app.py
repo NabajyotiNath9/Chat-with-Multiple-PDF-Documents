@@ -91,3 +91,8 @@ def main():
     if user_question:
         user_input(user_question)
     else:
+        st.info("Upload PDFs and ask a question to begin.")
+
+# --- Run App ---
+if __name__ == "__main__":
+    main()
