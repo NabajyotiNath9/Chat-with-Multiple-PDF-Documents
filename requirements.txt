@@ -1,6 +1,6 @@
 streamlit
 PyPDF2
 langchain
-faiss-cpu
+chromadb
 google-generativeai
 python-dotenv
