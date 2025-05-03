@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-from langchain.document_loaders import PyPDFLoader
+from langchain.document_loaders import PyMuPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Function to load and split PDF
@@ -12,8 +12,8 @@ def load_and_split_pdf(uploaded_file):
     with open(temp_file_path, "wb") as temp_file:
         temp_file.write(uploaded_file.getbuffer())
 
-    # Now load the PDF using the file path
-    loader = PyPDFLoader(temp_file_path)
+    # Now load the PDF using the file path with PyMuPDFLoader
+    loader = PyMuPDFLoader(temp_file_path)
     documents = loader.load()
 
     # Split the documents into text chunks
