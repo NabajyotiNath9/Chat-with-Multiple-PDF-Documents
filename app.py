@@ -1,54 +1,93 @@
-import os
 import streamlit as st
-from langchain.document_loaders import PyMuPDFLoader
+from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_community.vectorstores import DocArrayInMemorySearch
+from langchain.chains.question_answering import load_qa_chain
+from langchain.prompts import PromptTemplate
+import google.generativeai as genai
 
-# Function to load and split PDF
-def load_and_split_pdf(uploaded_file):
-    # Create a temporary file path
-    temp_file_path = "temp_pdf.pdf"
-    
-    # Write the uploaded file into the temporary file
-    with open(temp_file_path, "wb") as temp_file:
-        temp_file.write(uploaded_file.getbuffer())
+# --- Configure Gemini API key from Streamlit secrets ---
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-    # Now load the PDF using the file path with PyMuPDFLoader
-    loader = PyMuPDFLoader(temp_file_path)
-    documents = loader.load()
+# --- PDF Text Extraction ---
+def get_pdf_text(pdf_docs):
+    text = ""
+    for pdf in pdf_docs:
+        pdf_reader = PdfReader(pdf)
+        for page in pdf_reader.pages:
+            content = page.extract_text()
+            if content:
+                text += content
+    return text
 
-    # Split the documents into text chunks
-    text_chunks = split_text_into_chunks(documents)
-    
-    # Clean up the temporary file after processing
-    os.remove(temp_file_path)
-    
-    return text_chunks
+# --- Split text into chunks ---
+def get_text_chunks(text):
+    splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
+    chunks = splitter.split_text(text)
+    return chunks
 
-# Function to split text into chunks
-def split_text_into_chunks(documents, chunk_size=500):
-    text_chunks = []
-    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=0)
-    
-    for doc in documents:
-        # Split the document into chunks
-        chunks = splitter.split_text(doc.page_content)  # Assuming `page_content` holds the text
-        text_chunks.extend(chunks)
-    
-    return text_chunks
+# --- Create in-memory vector store ---
+def get_vector_store(text_chunks):
+    embeddings = GoogleGenerativeAIEmbeddings(model="model/embedding-001")
+    vector_store = DocArrayInMemorySearch.from_texts(text_chunks, embedding=embeddings)
+    return vector_store
 
-# Main function for Streamlit app
+# --- Set up Gemini QA chain ---
+def get_conversational_chain():
+    prompt_template = """
+    Answer the question as detailed as possible from the provided context. 
+    If the answer is not in the provided context, just say "answer is not available in the context".    
+    Context:
+    {context}
+
+    Question:
+    {question}
+
+    Answer:
+    """
+    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
+    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+    return chain
+
+# --- Handle user questions ---
+def user_input(user_question):
+    if "vector_store" not in st.session_state:
+        st.error("Please upload and process PDFs before asking questions.")
+        return
+    vector_store = st.session_state.vector_store
+    docs = vector_store.similarity_search(user_question)
+    chain = get_conversational_chain()
+    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
+    st.write("Reply:", response["output_text"])
+
+# --- Main App ---
 def main():
-    st.title("Chat with PDF Documents")
+    st.set_page_config(page_title="Chat with Multiple PDFs")
+    st.header("📄 Chat with Multiple PDF Files (Powered by Gemini)")
 
-    uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
-    
-    if uploaded_file is not None:
-        # Load and split the PDF
-        text_chunks = load_and_split_pdf(uploaded_file)
-        
-        # Display a preview of the extracted text
-        st.write("Extracted Text Chunks:")
-        st.write(text_chunks[:5])  # Display first 5 chunks as preview
+    with st.sidebar:
+        st.title("Upload PDFs")
+        pdf_docs = st.file_uploader("Upload your PDF files and click Submit & Process", accept_multiple_files=True)
+        if st.button("Submit & Process") and pdf_docs:
+            with st.spinner("Processing..."):
+                # Get the raw text from uploaded PDFs
+                raw_text = get_pdf_text(pdf_docs)
+                
+                # Split the raw text into chunks
+                text_chunks = get_text_chunks(raw_text)
+                
+                # Get the vector store
+                vector_store = get_vector_store(text_chunks)
+                
+                # Save the vector store in the session state
+                st.session_state.vector_store = vector_store
+                
+                st.success("PDFs processed! You can now ask questions.")
 
-if __name__ == "__main__":
-    main()
+    # Allow the user to ask a question
+    user_question = st.text_input("Ask a question from your uploaded PDFs:")
+    if user_question:
+        user_input(user_question)
+    else:
