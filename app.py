@@ -2,7 +2,7 @@ import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain.vectorstores import Chroma
+from langchain.vectorstores import DocArrayInMemorySearch
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 import google.generativeai as genai
@@ -28,10 +28,10 @@ def get_text_chunks(text):
     chunks = splitter.split_text(text)
     return chunks
 
-# --- Create Chroma vector store (in memory) ---
+# --- Create in-memory vector store ---
 def get_vector_store(text_chunks):
     embeddings = GoogleGenerativeAIEmbeddings(model="model/embedding-001")
-    vector_store = Chroma.from_texts(text_chunks, embedding=embeddings)
+    vector_store = DocArrayInMemorySearch.from_texts(text_chunks, embedding=embeddings)
     return vector_store
 
 # --- Set up Gemini QA chain ---
@@ -55,21 +55,18 @@ def get_conversational_chain():
 
 # --- Handle user questions ---
 def user_input(user_question):
-    try:
-        if "vector_store" not in st.session_state:
-            st.error("Please upload and process PDFs before asking questions.")
-            return
-        vector_store = st.session_state.vector_store
-        docs = vector_store.similarity_search(user_question)
-        chain = get_conversational_chain()
-        response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
-        st.write("Reply:", response["output_text"])
-    except Exception as e:
-        st.error(f"An error occurred while processing your question: {e}")
+    if "vector_store" not in st.session_state:
+        st.error("Please upload and process PDFs before asking questions.")
+        return
+    vector_store = st.session_state.vector_store
+    docs = vector_store.similarity_search(user_question)
+    chain = get_conversational_chain()
+    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
+    st.write("Reply:", response["output_text"])
 
 # --- Main App ---
 def main():
-    st.set_page_config(page_title="Chat with Multiple PDF")
+    st.set_page_config(page_title="Chat with Multiple PDFs")
     st.header("📄 Chat with Multiple PDF Files (Powered by Gemini)")
 
     with st.sidebar:
@@ -77,16 +74,12 @@ def main():
         pdf_docs = st.file_uploader("Upload your PDF files and click Submit & Process", accept_multiple_files=True)
         if st.button("Submit & Process") and pdf_docs:
             with st.spinner("Processing..."):
-                try:
-                    raw_text = get_pdf_text(pdf_docs)
-                    text_chunks = get_text_chunks(raw_text)
-                    vector_store = get_vector_store(text_chunks)
-                    st.session_state.vector_store = vector_store
-                    st.success("PDFs processed! You can now ask questions.")
-                except Exception as e:
-                    st.error(f"Error processing PDFs: {e}")
+                raw_text = get_pdf_text(pdf_docs)
+                text_chunks = get_text_chunks(raw_text)
+                vector_store = get_vector_store(text_chunks)
+                st.session_state.vector_store = vector_store
+                st.success("PDFs processed! You can now ask questions.")
 
-    # Input box for user question
     user_question = st.text_input("Ask a question from your uploaded PDFs:")
     if user_question:
         user_input(user_question)
