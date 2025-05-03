@@ -23,13 +23,13 @@ def get_pdf_text(pdf_docs):
 
 # --- Split text into chunks ---
 def get_text_chunks(text):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_text(text)
     return chunks
 
 # --- Create in-memory vector store ---
 def get_vector_store(text_chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(model="model/embedding-001")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     vector_store = DocArrayInMemorySearch.from_texts(text_chunks, embedding=embeddings)
     return vector_store
 
