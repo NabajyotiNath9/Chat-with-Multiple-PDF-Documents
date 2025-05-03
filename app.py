@@ -6,9 +6,19 @@ from langchain_community.vectorstores import DocArrayInMemorySearch
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 import google.generativeai as genai
+import os
+import re
+from typing import List
 
-# --- Configure Gemini API key from Streamlit secrets ---
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+# --- Configure Gemini API Key ---
+if "GOOGLE_API_KEY" in st.secrets:
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# --- Clean Text to Prevent Encoding Issues ---
+def clean_text(text: str) -> str:
+    text = re.sub(r"[\x00-\x1F\x7F-\x9F]", "", text)
+    return text.strip()
 
 # --- PDF Text Extraction ---
 def get_pdf_text(pdf_docs):
@@ -18,17 +28,16 @@ def get_pdf_text(pdf_docs):
         for page in pdf_reader.pages:
             content = page.extract_text()
             if content:
-                text += content
+                text += clean_text(content)
     return text
 
 # --- Split text into chunks ---
-def get_text_chunks(text):
+def get_text_chunks(text: str) -> List[str]:
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = splitter.split_text(text)
-    return chunks
+    return splitter.split_text(text)
 
-# --- Create in-memory vector store ---
-def get_vector_store(text_chunks):
+# --- Create in-memory vector store with batching ---
+def get_vector_store(text_chunks: List[str]):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     vector_store = DocArrayInMemorySearch.from_texts(text_chunks, embedding=embeddings)
     return vector_store
@@ -61,23 +70,27 @@ def user_input(user_question):
     docs = vector_store.similarity_search(user_question)
     chain = get_conversational_chain()
     response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
-    st.write("Reply:", response["output_text"])
+    st.write("**Answer:**")
+    st.success(response["output_text"])
 
 # --- Main App ---
 def main():
     st.set_page_config(page_title="Chat with Multiple PDFs")
-    st.header("📄 Chat with Multiple PDF Files (Powered by Gemini)")
+    st.header("Chat with Multiple PDF Files")
 
     with st.sidebar:
         st.title("Upload PDFs")
         pdf_docs = st.file_uploader("Upload your PDF files and click Submit & Process", accept_multiple_files=True)
         if st.button("Submit & Process") and pdf_docs:
             with st.spinner("Processing..."):
-                raw_text = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
-                vector_store = get_vector_store(text_chunks)
-                st.session_state.vector_store = vector_store
-                st.success("PDFs processed! You can now ask questions.")
+                try:
+                    raw_text = get_pdf_text(pdf_docs)
+                    text_chunks = get_text_chunks(raw_text)
+                    vector_store = get_vector_store(text_chunks)
+                    st.session_state.vector_store = vector_store
+                    st.success("PDFs processed successfully! You can now ask questions.")
+                except Exception as e:
+                    st.error(f"Error during processing: {e}")
 
     user_question = st.text_input("Ask a question from your uploaded PDFs:")
     if user_question:
