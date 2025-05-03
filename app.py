@@ -1,7 +1,7 @@
 import os
 import streamlit as st
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Function to load and split PDF
 def load_and_split_pdf(uploaded_file):
@@ -27,10 +27,13 @@ def load_and_split_pdf(uploaded_file):
 # Function to split text into chunks
 def split_text_into_chunks(documents, chunk_size=500):
     text_chunks = []
+    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=0)
+    
     for doc in documents:
-        text = doc.page_content  # Assuming `page_content` holds the text
-        for i in range(0, len(text), chunk_size):
-            text_chunks.append(text[i:i+chunk_size])
+        # Split the document into chunks
+        chunks = splitter.split_text(doc.page_content)  # Assuming `page_content` holds the text
+        text_chunks.extend(chunks)
+    
     return text_chunks
 
 # Main function for Streamlit app
