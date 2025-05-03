@@ -2,13 +2,13 @@ import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain.vectorstores import FAISS
+from langchain.vectorstores import Chroma
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 import google.generativeai as genai
 import os
 
-# --- Configure Gemini API key directly from Streamlit secrets ---
+# --- Configure Gemini API key from Streamlit secrets ---
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # --- PDF Text Extraction ---
@@ -28,10 +28,10 @@ def get_text_chunks(text):
     chunks = splitter.split_text(text)
     return chunks
 
-# --- Create FAISS vector store (in memory) ---
+# --- Create Chroma vector store (in memory) ---
 def get_vector_store(text_chunks):
     embeddings = GoogleGenerativeAIEmbeddings(model="model/embedding-001")
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+    vector_store = Chroma.from_texts(text_chunks, embedding=embeddings)
     return vector_store
 
 # --- Set up Gemini QA chain ---
